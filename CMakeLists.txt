@@ -5,26 +5,28 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# 编译警告，方便提前发现bug
-if(MSVC)
-    add_compile_options(/W4)
-else()
-    add_compile_options(-Wall -Wextra -Wpedantic -g)
-endif()
-
-# 内存池静态库
+# 只对 C++ 目标加，不污染全局
 add_library(mango_pool STATIC
     src/mango_pool/mango_pool.cpp
 )
 target_include_directories(mango_pool PUBLIC src)
+target_compile_options(mango_pool PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W4>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+)
 
-# GTest单元测试
+# 测试
+enable_testing()
 find_package(GTest REQUIRED)
-include_directories(${GTEST_INCLUDE_DIRS})
+find_package(Threads REQUIRED)
 
 add_executable(test_pool tests/test_pool.cpp)
-target_link_libraries(test_pool mango_pool ${GTEST_LIBRARIES} pthread)
+target_link_libraries(test_pool PRIVATE
+    mango_pool
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
 
-add_executable(bench_pool bench/bench_pool.cpp)
-target_link_libraries(bench_pool mango_pool pthread)
-
+include(GoogleTest)
+gtest_discover_tests(test_pool)

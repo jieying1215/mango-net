@@ -1,18 +1,10 @@
-# CMake构建目录
 build/
 cmake-build-*/
-
-# 编译产物
 *.o
 *.a
 *.so
 *.out
-
-# IDE
 .vscode/
 .idea/
-
-# 临时文件日志
 *.log
 *.swp
-
