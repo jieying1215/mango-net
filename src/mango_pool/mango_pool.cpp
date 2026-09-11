@@ -48,6 +48,7 @@ MangoPool::~MangoPool() {
 void* MangoPool::allocate(size_t bytes) {
     if (bytes == 0) return nullptr;
 
+    std::lock_guard<std::mutex> lock(mutex_); //加锁
     const size_t total_need = bytes + sizeof(BlockHeader);
 
     BlockHeader** pcur = &free_list_;
@@ -80,12 +81,14 @@ void* MangoPool::allocate(size_t bytes) {
 }
 
 void MangoPool::deallocate(void* p) {
+    std::lock_guard<std::mutex> lock(mutex_); //加锁
     if (p == nullptr) return;
 
     // 由用户数据区反推出块头部
     BlockHeader* block = reinterpret_cast<BlockHeader*>(
         reinterpret_cast<char*>(p) - sizeof(BlockHeader));
-
+    
+    if(block->is_free) return;//防止double free
     block->is_free = true;
 
     // 按地址顺序把 block 插入到 free_list_ 中（保持链表按地址有序）
@@ -116,6 +119,18 @@ void MangoPool::deallocate(void* p) {
             prev->next = block->next;
         }
     }
+}
+size_t MangoPool:: free_bytes() const{
+    std::lock_guard<std::mutex> lock(mutex_);
+    size_t total = 0;
+    for(BlockHeader* p = free_list_;p!=nullptr;p=p->next){
+        total += p->size;
+    }
+    return total;
+}
+
+size_t MangoPool::capacity() const{
+    return pool_capacity_;
 }
 
 } // namespace mango_pool

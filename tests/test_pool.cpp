@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
-
+#include<atomic>
+#include<thread>
+#include<vector>
 #include <cstdint>
 #include <cstring>
 #include <set>
@@ -114,6 +116,58 @@ TEST(MangoPoolTest, EdgeCases) {
 
     // 释放 nullptr 应当安全
     pool.deallocate(nullptr);
+}
+
+//测试：多线程并发分配/释放
+TEST(MangoPoolTest, ConcurrentAllocDealloc) {
+    MangoPool pool(16 * 1024 * 1024);  // 16MB
+
+    constexpr int kThreads = 8;
+    constexpr int kRounds  = 10000;
+    std::atomic<int> success{0};
+
+    auto worker = [&]() {
+        std::vector<void*> ptrs;
+        ptrs.reserve(64);
+        for (int i = 0; i < kRounds; ++i) {
+            void* p = pool.allocate(64);
+            if (p != nullptr) {
+                success.fetch_add(1, std::memory_order_relaxed);
+                ptrs.push_back(p);
+            }
+            if (ptrs.size() >= 32) {
+                for (void* q : ptrs) pool.deallocate(q);
+                ptrs.clear();
+            }
+        }
+        for (void* q : ptrs) pool.deallocate(q);
+    };
+
+    std::vector<std::thread> threads;
+    for (int i = 0; i < kThreads; ++i) {
+        threads.emplace_back(worker);
+    }
+    for (auto& t : threads) t.join();
+
+    // 所有分配都应该成功
+    EXPECT_EQ(success.load(), kThreads * kRounds);
+
+    // 全部释放后，池子应该恢复成一块
+    EXPECT_EQ(pool.free_bytes(), pool.capacity());
+}
+
+// 测试：统计接口
+TEST(MangoPoolTest, FreeBytesStats) {
+    MangoPool pool(4096);
+    EXPECT_EQ(pool.capacity(), 4096);
+    EXPECT_GT(pool.free_bytes(), 0);
+
+    void* p = pool.allocate(100);
+    ASSERT_NE(p, nullptr);
+    EXPECT_LT(pool.free_bytes(), 4096);   // 分配后空闲减少
+
+    pool.deallocate(p);
+    EXPECT_EQ(pool.free_bytes(), pool.capacity());  // 释放后恢复
 }
 
 int main(int argc, char** argv) {

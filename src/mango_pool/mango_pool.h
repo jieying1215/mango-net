@@ -1,6 +1,6 @@
 #ifndef MANGO_POOL_H
 #define MANGO_POOL_H
-
+#include<mutex>
 #include <cstddef>  // size_t
 
 namespace mango_pool {
@@ -23,6 +23,7 @@ private:
     BlockHeader* free_list_;  // 空闲链表头指针
     void* pool_start_;        // 整个内存池的起始地址
     size_t pool_capacity_;    // 内存池总容量
+    mutable std::mutex mutex_; //新增:保护空闲链表
 
 public:
     // 构造：传入内存池总大小，一次性向OS申请
@@ -38,6 +39,10 @@ public:
     // 禁止拷贝，避免 mmap 的指针被双重释放
     MangoPool(const MangoPool&) = delete;
     MangoPool& operator=(const MangoPool&) = delete;
+
+    //新增，统计信息，方便压测和调试
+    size_t free_bytes() const;
+    size_t capacity() const;
 };
 
 } // namespace mango_pool
